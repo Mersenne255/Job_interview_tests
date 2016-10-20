@@ -10,7 +10,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.CyclicBarrier;
 
 import org.junit.After;
 import org.junit.Before;
@@ -46,10 +48,10 @@ public class Tests {
 	 * @throws InterruptedException
 	 */
 	@Test
-	public void aConcurrencyTest() throws InterruptedException {
+	public void _1concurrencyTest() throws InterruptedException {
 		final int NUMBER_OF_THREADS = 10;
 		final CountDownLatch latch = new CountDownLatch(NUMBER_OF_THREADS);
-		final CountDownLatch latch2 = new CountDownLatch(NUMBER_OF_THREADS);
+		final CyclicBarrier gate = new CyclicBarrier(NUMBER_OF_THREADS);
 		Random r = new Random();
 		class T extends Thread {
 			ConcreteTransactionWrapper inst;
@@ -65,9 +67,13 @@ public class Tests {
 
 			@Override
 			public void run() {
-				latch.countDown();
+				try {
+					gate.await();
+				} catch (InterruptedException | BrokenBarrierException e) {
+					e.printStackTrace();
+				}
 				inst.calculateCommonTransactionSum(transactions1, transactions2);
-				latch2.countDown();
+				latch.countDown();
 			}
 		}
 
@@ -84,12 +90,11 @@ public class Tests {
 			t.start();
 		}
 		latch.await();
-		latch2.await();
 		assertEquals(NUMBER_OF_THREADS, inst.getNumberOfInvocations());
 	}
 
 	@Test
-	public void basicFunctionalityTest() {
+	public void _2basicFunctionalityTest() {
 		List<String> a1 = new ArrayList<String>();
 		a1.add("13.1");
 		a1.add("15");
@@ -99,11 +104,22 @@ public class Tests {
 		a2.add("13.1");
 		ConcreteTransactionWrapper inst = new ConcreteTransactionWrapper();
 		String result = inst.calculateCommonTransactionSum(a1, a2);
-		assertTrue(result.equals("13.1"));
+		assertEquals("13.1", result);
 	}
 
 	@Test
-	public void counterTest() {
+	public void _2negativeResultTest() {
+		List<String> a1 = new ArrayList<String>();
+		a1.add("-15");
+		List<String> a2 = new ArrayList<String>();
+		a2.add("-15");
+		ConcreteTransactionWrapper inst = new ConcreteTransactionWrapper();
+		String result = inst.calculateCommonTransactionSum(a1, a2);
+		assertEquals("-15", result);
+	}
+
+	@Test
+	public void _2counterTest() {
 		final int NUMBER_OF_INVOCATIONS = 35;
 		List<String> a1 = new ArrayList<String>();
 		a1.add("13.1");
@@ -124,7 +140,32 @@ public class Tests {
 	}
 
 	@Test
-	public void formatingValidationTest() {
+	public void _3advancedCounterTest() {
+		final int NUMBER_OF_INVOCATIONS = 35;
+		List<String> a1 = new ArrayList<String>();
+		a1.add("13.1");
+		a1.add("15");
+		List<String> a2 = new ArrayList<String>();
+		a2.add("16.54353");
+		a2.add("0.321312");
+		a2.add("13.1");
+		ConcreteTransactionWrapper inst = new ConcreteTransactionWrapper();
+		for (int i = 0; i < NUMBER_OF_INVOCATIONS; i++) {
+			inst.calculateCommonTransactionSum(a1, a2);
+		}
+		try {
+			inst.calculateCommonTransactionSum(new ArrayList(), new ArrayList());
+		} catch (Exception e) {
+		}
+		try {
+			inst.calculateCommonTransactionSum(null, null);
+		} catch (Exception e) {
+		}
+		assertEquals(NUMBER_OF_INVOCATIONS + 2, inst.getNumberOfInvocations());
+	}
+
+	@Test
+	public void _2formatingValidationTest() {
 		List<String> a1 = new ArrayList<String>();
 		a1.add("13,1");
 		a1.add("0015.600");
@@ -139,7 +180,49 @@ public class Tests {
 	}
 
 	@Test
-	public void floatingPointTest() {
+	public void _2duplicationRemovalTest() {
+		List<String> a1 = new ArrayList<String>();
+		a1.add("15.60");
+		a1.add("15.6");
+		a1.add("1.1");
+		List<String> a2 = new ArrayList<String>();
+		a2.add("15.60");
+		a2.add("15.6");
+		a2.add("1.10");
+		ConcreteTransactionWrapper inst = new ConcreteTransactionWrapper();
+		String result = inst.calculateCommonTransactionSum(a1, a2);
+		assertEquals("16.7", result);
+	}
+
+	@Test
+	public void _4advancedFormatingValidationTest() {
+		List<String> a1 = new ArrayList<String>();
+		a1.add("-1.23E-12");
+		a1.add("-895.25f");
+		a1.add("--1");
+		a1.add("3");
+		List<String> a2 = new ArrayList<String>();
+		a2.add("-1.23E-12");
+		a2.add("-895.25f");
+		a2.add("--1");
+		a2.add("3");
+		ConcreteTransactionWrapper inst = new ConcreteTransactionWrapper();
+		String result = inst.calculateCommonTransactionSum(a1, a2);
+		assertEquals("3", result);
+		a1.clear();
+		a2.clear();
+		a1.add("-.0");
+		a2.add("-.0");
+		try {
+			inst.calculateCommonTransactionSum(a1, a2);
+			fail();
+		} catch (Exception e) {
+			
+		}
+	}
+
+	@Test
+	public void _3floatingPointTest() {
 		List<String> a1 = new ArrayList<String>();
 		a1.add("0.3");
 		a1.add("-0.2");
@@ -152,7 +235,7 @@ public class Tests {
 	}
 
 	@Test
-	public void minMaxValidationTest() {
+	public void _2minMaxValidationTest() {
 		List<String> a1 = new ArrayList<String>();
 		a1.add("13.1");
 		a1.add(AbstractTransactionUtil.MAX_VALUE + "1");
@@ -167,7 +250,7 @@ public class Tests {
 	}
 
 	@Test
-	public void unexpectedExceptionTest() {
+	public void _3unexpectedExceptionTest() {
 		boolean isExceptionThrown = false;
 		try {
 			List<String> a1 = new ArrayList<String>();
@@ -185,22 +268,7 @@ public class Tests {
 	}
 
 	@Test
-	public void printLowestNumberTest() {
-		List<String> a1 = new ArrayList<String>();
-		a1.add("4322.42");
-		a1.add("5.2");
-		a1.add("13.1");
-		List<String> a2 = new ArrayList<String>();
-		a2.add("13.1");
-		a2.add("5.2");
-		a2.add("-48949.1545");
-		ConcreteTransactionWrapper inst = new ConcreteTransactionWrapper();
-		inst.calculateCommonTransactionSum(a1, a2);
-		assertEquals("-48949.1545", outContent.toString());
-	}
-
-	@Test
-	public void zeroTest() {
+	public void _2zeroTest() {
 		List<String> a1 = new ArrayList<String>();
 		a1.add("0");
 		List<String> a2 = new ArrayList<String>();
@@ -213,7 +281,7 @@ public class Tests {
 	}
 
 	@Test
-	public void nullTest() {
+	public void _2nullTest() {
 		List<String> a1 = new ArrayList<String>();
 		a1.add("14");
 		a1.add(null);
@@ -225,7 +293,8 @@ public class Tests {
 		try {
 			String result = inst.calculateCommonTransactionSum(a1, a2);
 			assertEquals("14", result);
-			inst.calculateCommonTransactionSum(null, null);
+			result = inst.calculateCommonTransactionSum(null, null);
+			assertEquals(null, result);
 		} catch (Exception e) {
 			fail();
 			return;
